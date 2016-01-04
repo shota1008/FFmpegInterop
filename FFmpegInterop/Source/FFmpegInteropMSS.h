@@ -58,7 +58,7 @@ namespace FFmpegInterop
 		void OnStarting(MediaStreamSource ^sender, MediaStreamSourceStartingEventArgs ^args);
 		void OnSampleRequested(MediaStreamSource ^sender, MediaStreamSourceSampleRequestedEventArgs ^args);
 
-		MediaStreamSource^ mss;
+		MediaStreamSource^ mediaStreamSource;
 		EventRegistrationToken startingRequestedToken;
 		EventRegistrationToken sampleRequestedToken;
 

@@ -104,6 +104,9 @@ namespace MediaPlayerCS
                 // options.Add("rtsp_flags", "prefer_tcp");
                 // options.Add("stimeout", 100000);
 
+                // http options
+                options.Add("user_agent", "MediaPlayerCS");
+
                 try
                 {
                     mediaElement.Stop();

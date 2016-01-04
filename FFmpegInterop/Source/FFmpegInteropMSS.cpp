@@ -60,11 +60,11 @@ FFmpegInteropMSS::FFmpegInteropMSS()
 
 FFmpegInteropMSS::~FFmpegInteropMSS()
 {
-	if (mss)
+	if (mediaStreamSource)
 	{
-		mss->Starting -= startingRequestedToken;
-		mss->SampleRequested -= sampleRequestedToken;
-		mss = nullptr;
+		mediaStreamSource->Starting -= startingRequestedToken;
+		mediaStreamSource->SampleRequested -= sampleRequestedToken;
+		mediaStreamSource = nullptr;
 	}
 
 	// Clear our data
@@ -123,7 +123,7 @@ FFmpegInteropMSS^ FFmpegInteropMSS::CreateFFmpegInteropMSSFromUri(String^ uri, b
 
 MediaStreamSource^ FFmpegInteropMSS::GetMediaStreamSource()
 {
-	return mss;
+	return mediaStreamSource;
 }
 
 HRESULT FFmpegInteropMSS::CreateMediaStreamSource(String^ uri, bool forceAudioDecode, bool forceVideoDecode, PropertySet^ ffmpegOptions)
@@ -355,36 +355,36 @@ HRESULT FFmpegInteropMSS::InitFFmpegContext(bool forceAudioDecode, bool forceVid
 	switch (mode)
 	{
 	case 1:
-		mss = ref new MediaStreamSource(videoStreamDescriptor, audioStreamDescriptor);
+		mediaStreamSource = ref new MediaStreamSource(videoStreamDescriptor, audioStreamDescriptor);
 		break;
 	case 2:
-		mss = ref new MediaStreamSource(audioStreamDescriptor);
+		mediaStreamSource = ref new MediaStreamSource(audioStreamDescriptor);
 		break;
 	case 3:
-		mss = ref new MediaStreamSource(videoStreamDescriptor);
+		mediaStreamSource = ref new MediaStreamSource(videoStreamDescriptor);
 		break;
 	//default:
 	//	return E_OUTOFMEMORY;
 	}
 
-	if (mss == nullptr)
+	if (mediaStreamSource == nullptr)
 	{
 		return E_OUTOFMEMORY;
 	}
 
 	if (mediaDuration.Duration > 0)
 	{
-		mss->Duration = mediaDuration;
-		mss->CanSeek = true;
+		mediaStreamSource->Duration = mediaDuration;
+		mediaStreamSource->CanSeek = true;
 	}
 	else
 	{
 		// Set buffer time to 0 for realtime streaming to reduce latency
-		mss->BufferTime = { 0 };
+		mediaStreamSource->BufferTime = { 0 };
 	}
 
-	startingRequestedToken = mss->Starting += ref new TypedEventHandler<MediaStreamSource ^, MediaStreamSourceStartingEventArgs ^>(this, &FFmpegInteropMSS::OnStarting);
-	sampleRequestedToken = mss->SampleRequested += ref new TypedEventHandler<MediaStreamSource ^, MediaStreamSourceSampleRequestedEventArgs ^>(this, &FFmpegInteropMSS::OnSampleRequested);
+	startingRequestedToken = mediaStreamSource->Starting += ref new TypedEventHandler<MediaStreamSource ^, MediaStreamSourceStartingEventArgs ^>(this, &FFmpegInteropMSS::OnStarting);
+	sampleRequestedToken = mediaStreamSource->SampleRequested += ref new TypedEventHandler<MediaStreamSource ^, MediaStreamSourceSampleRequestedEventArgs ^>(this, &FFmpegInteropMSS::OnSampleRequested);
 
 	return S_OK;
 }
@@ -528,34 +528,28 @@ HRESULT FFmpegInteropMSS::CreateVideoStreamDescriptor(bool forceDecode)
 
 HRESULT FFmpegInteropMSS::ParseOptions(PropertySet^ ffmpegOptions)
 {
+	// Convert FFmpeg options given in PropertySet to AVDictionary. List of options can be found in https://www.ffmpeg.org/ffmpeg-protocols.html
+	if (ffmpegOptions == nullptr)
+	{
+		return S_OK;
+	}
+
 	HRESULT hr = S_OK;
 
-	// Convert FFmpeg options given in PropertySet to AVDictionary. List of options can be found in https://www.ffmpeg.org/ffmpeg-protocols.html
-	if (ffmpegOptions != nullptr)
+	for each (auto opt in ffmpegOptions)
 	{
-		auto options = ffmpegOptions->First();
+		String^ key = opt->Key;
+		std::string keyA(key->Begin(), key->End());
 
-		while (options->HasCurrent)
+		String^ val = opt->Value->ToString();
+		std::string valA(val->Begin(), val->End());
+
+		// Add key and value pair entry
+		int ret = av_dict_set(&avDict, keyA.c_str(), valA.c_str(), 0);
+		if (ret < 0)
 		{
-			String^ key = options->Current->Key;
-			std::wstring keyW(key->Begin());
-			std::string keyA(keyW.begin(), keyW.end());
-			const char* keyChar = keyA.c_str();
-
-			// Convert value from Object^ to const char*. avformat_open_input will internally convert value from const char* to the correct type
-			String^ value = options->Current->Value->ToString();
-			std::wstring valueW(value->Begin());
-			std::string valueA(valueW.begin(), valueW.end());
-			const char* valueChar = valueA.c_str();
-
-			// Add key and value pair entry
-			if (av_dict_set(&avDict, keyChar, valueChar, 0) < 0)
-			{
-				hr = E_INVALIDARG;
-				break;
-			}
-
-			options->MoveNext();
+			hr = E_INVALIDARG;
+			break;
 		}
 	}
 
